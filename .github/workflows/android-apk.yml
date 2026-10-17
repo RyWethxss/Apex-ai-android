@@ -14,16 +14,27 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Install SDK
+      - name: Prepare Android SDK
+        shell: bash
         run: |
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          set -euxo pipefail
+          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+          SDKMANAGER="$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}" -type f -name sdkmanager 2>/dev/null | head -n 1 || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            mkdir -p "$HOME/android-sdk/cmdline-tools/latest"
+            curl -fL --retry 3 -o /tmp/commandlinetools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+            unzip -q /tmp/commandlinetools.zip -d /tmp/android-cli
+            mv /tmp/android-cli/cmdline-tools/* "$HOME/android-sdk/cmdline-tools/latest/"
+            echo "ANDROID_HOME=$HOME/android-sdk" >> "$GITHUB_ENV"
+            SDKMANAGER="$HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager"
+          fi
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
       - name: Build APK
-        run: gradle --no-daemon assembleDebug
+        run: gradle --no-daemon --stacktrace assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: APEX-AI-Android-APK
